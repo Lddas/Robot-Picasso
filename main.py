@@ -18,16 +18,25 @@ class Binary_pixel:
 
 class Image_problem:
     def __init__(self, image):
-        im = imageio.imread(image)
+        im = imageio.imread(image, pilmode="RGB")
+#        if np.shape(im).__len__() != 3 :
+#            np.reshape(im,(np.shape(im)[0],np.shape(im)[1]/3,3))
         self.n = np.shape(im)[0]
         self.m = np.shape(im)[1]
-        new_im = np.zeros((self.n, self.m, 1))
+        new_im =[[]]
+        self.black_pixels =[]
         for i, ligne in enumerate(im):
+            new_line=[]
             for j, pixel in enumerate(ligne):
                 if pixel[0] <= 60:
-                    new_im[i, j] = Binary_pixel(i,j,1)  # 1 means it's black
+                    new_line.append(Binary_pixel(i,j,1))# 1 means it's black
+                    self.black_pixels.append(Binary_pixel(i,j,1))
                 else:
-                    new_im[i, j] = Binary_pixel(i,j,0)  # 0 means it's white
+                    new_line.append(Binary_pixel(i,j,0))  # 0 means it's white
+            if i == 0 :
+                new_im[0] = new_line
+            else:
+                new_im.append(new_line)
         self.binary_image = new_im
         self.visited = []
         self.path_list = []
@@ -37,38 +46,35 @@ class Image_problem:
         distance_list = []
         for i in range(k):
             for j in range(k):
-                if i!=j and self.binary_image[binary_pixel.x+i,binary_pixel.y+j].value == 1:
-                    possible_points.append(self.binary_image[binary_pixel.x+i,binary_pixel.y+j])
-        if possible_points.__len__() != 0:
-            for possible_pixel in possible_points:
-                distance_list.append(man_distance(possible_pixel,binary_pixel))
-            i = distance_list.index(min(distance_list))
-            closest_point = possible_points[i]
-            distance = distance_list[i]
-            return closest_point,distance
-        else:
-            return None,None
+                if i!=j and self.binary_image[binary_pixel.x+i][binary_pixel.y+j].value == 1:
+                    closest_point = self.binary_image[binary_pixel.x+i][binary_pixel.y+j]
+                    possible_points.append(closest_point)
+                    if i == 1 or j == 1:
+                        return closest_point,man_distance(binary_pixel,closest_point)
+        return None,None
 
 
 
     def first_path_detection(self,first_point):
-        path = []
+        path = [first_point]
+        i=0
         while True:
-            closest_point, distance = self.find_closest_point(first_point)
+            closest_point, distance = self.find_closest_point(path[i])
+            i = i+1
             if closest_point is None:
                 break
             path.append(closest_point)
             self.visited.append(closest_point)
         self.path_list.append(path)
-        if path.__len__() != 0:
+        if path.__len__() != 1:
             return path
         else:
             return None
 
     def creat_path_list(self):
-        for binary_pixel in self.binary_image:
-            if binary_pixel.value == 1 and not self.visited.__contains__(binary_pixel) :
-                new_path = self.first_path_detection(binary_pixel)
+        for pixel in self.black_pixels:
+            if not self.visited.__contains__(pixel) :
+                new_path = self.first_path_detection(pixel)
                 if new_path is not None:
                     self.path_list.append(new_path)
 
@@ -225,6 +231,6 @@ def man_distance(pixel1,pixel2):
         return (abs(pixel1.x - pixel2.x)+abs(pixel1.y - pixel2.y))
 
 ########################################################################
-if __name__ == "__main__":
-    create_image(500)
-    # load_image("87-875989_hearts-hearts-png-black-and-white.png")
+
+prb = Image_problem('Rect_and_Circ.png')
+prb.creat_path_list()
