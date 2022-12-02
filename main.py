@@ -29,8 +29,9 @@ class Image_problem:
             new_line=[]
             for j, pixel in enumerate(ligne):
                 if pixel[0] <= 60:
-                    new_line.append(Binary_pixel(i,j,1))# 1 means it's black
-                    self.black_pixels.append(Binary_pixel(i,j,1))
+                    new_pixel = Binary_pixel(i,j,1) # 1 means it's black
+                    new_line.append(new_pixel)
+                    self.black_pixels.append(new_pixel)
                 else:
                     new_line.append(Binary_pixel(i,j,0))  # 0 means it's white
             if i == 0 :
@@ -38,19 +39,20 @@ class Image_problem:
             else:
                 new_im.append(new_line)
         self.binary_image = new_im
-        self.visited = []
+        self.visited = set()
         self.path_list = []
+        return
 
-    def find_closest_point(self, binary_pixel,k = 6): #returns closest point, and its distance. K is how far away you check
+    def find_closest_point(self, binary_pixel,k = 1): #returns closest point that hasn't been visited, and its distance. K is how far away you check
         possible_points = []
         distance_list = []
-        for i in range(k):
-            for j in range(k):
-                if i!=j and self.binary_image[binary_pixel.x+i][binary_pixel.y+j].value == 1:
-                    closest_point = self.binary_image[binary_pixel.x+i][binary_pixel.y+j]
-                    possible_points.append(closest_point)
-                    if i == 1 or j == 1:
-                        return closest_point,man_distance(binary_pixel,closest_point)
+        for i in range(-k,k+1):
+            for j in range(-k,k+1):
+                if binary_pixel.x+i >= 0 and binary_pixel.x+i < self.n and binary_pixel.y+j>=0 and binary_pixel.y+j<self.m:
+                    new_pixel = self.binary_image[binary_pixel.x+i][binary_pixel.y+j]
+                    if new_pixel.value == 1 and not new_pixel in self.visited:
+                        possible_points.append(new_pixel)
+                        return new_pixel,man_distance(binary_pixel,new_pixel)
         return None,None
 
 
@@ -64,19 +66,20 @@ class Image_problem:
             if closest_point is None:
                 break
             path.append(closest_point)
-            self.visited.append(closest_point)
-        self.path_list.append(path)
+            self.visited.add(closest_point)
         if path.__len__() != 1:
             return path
         else:
-            return None
+            return None 
 
     def creat_path_list(self):
         for pixel in self.black_pixels:
-            if not self.visited.__contains__(pixel) :
+            if not pixel in self.visited :
+                self.visited.add(pixel)
                 new_path = self.first_path_detection(pixel)
                 if new_path is not None:
                     self.path_list.append(new_path)
+        return
 
 
 
@@ -163,29 +166,6 @@ def load_image(image):
     return new_im
 
 
-def path_detect_DFS_recurs(pixel, visited, image_array, path_list, path):  # Pixel = [x,y,]
-    visited.append(pixel)
-    for i in (-1, 0, 1):
-        for j in (-1, 0, 1):
-            if image_array[pixel[0] + i, pixel[1] + j] == 1 and j!=i and not pixel in visited:
-                new_pixel = image_array[pixel[0], pixel[1] + 1]
-                path.append(pixel)
-                path_detect_DFS_recurs(new_pixel, visited, image_array)
-    for i in (-1, 0, 1):
-        for j in (-1, 0, 1):
-            if image_array[pixel[0] + i, pixel[1] + j] == 1 and j != i:
-                return
-    path_list.append(path)
-    return visited
-
-
-def path_detect_DFS_first_iter(image_array):
-    visited = set()
-    starter_pixels = [[x,y] for x,y in image_array if image_array[x,y] == 1]
-    path_list = []
-    path = []
-    for i in range(starter_pixels.__len__()):
-        path_detect_DFS_recurs(starter_pixels[i],visited,)
 
 
 
@@ -232,5 +212,6 @@ def man_distance(pixel1,pixel2):
 
 ########################################################################
 
-prb = Image_problem('Rect_and_Circ.png')
+prb = Image_problem('lines and circles.png')
 prb.creat_path_list()
+print('yay')
