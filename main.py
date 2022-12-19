@@ -1,16 +1,18 @@
 import cv2
 import numpy as np
 import scipy
-import tp1bis.py
+import code_leo
+import serial
+
 
 DIM_MAX = 15  # cm
 DIM_POINT = 0.1  # cm
 MAX_NUM_OF_POINTS = int(DIM_MAX / DIM_POINT)
 TIP_PEN = 14  # cm
 ROBOT_TO_PAPER = 50  # cm
-DIF_Y = 3345 + 3843
-DIF_X = 1342
-DELTA_X = 6509
+DIF_Y = 1000
+DIF_X = 1000
+DELTA_X = 5900
 
 class Binary_pixel:
     def __init__(self,x ,y ,value):
@@ -88,26 +90,31 @@ class Image_problem:
             for coord in path:
                 rob_path.append(self.convert_coord_to_page(coord))
             self.rob_list_path.append(rob_path)
-        print('s')
 
+        ser = serial.Serial("COM8", baudrate=9600, bytesize=8, timeout=2, parity="N", xonxoff=0,
+                            stopbits=serial.STOPBITS_ONE)
 
-
+        code_leo.DRAW(ser, self.rob_list_path, 1291, 1436)
+        ser.close()
 
         return
 
-
+    # Returns the second gradient of a path
     def second_grad_of_path(self, path, filter, n = 1, m = 1):
         coord = []
         for pixel in path:
             coord.append([pixel.x, pixel.y])
         grad = np.gradient(np.gradient(np.array(coord),np.arange((len(path))) * n, axis=0), np.arange((len(path))) * m, axis=0)
         grad = np.apply_along_axis(np.linalg.norm, 1, grad)
+
+        # If the function is called with filter = True then we filter the signal with
+        # a low pass filter achieved by a convolution to make it smoother
         if filter:
             grad = scipy.signal.convolve(grad,np.ones(10)/10)
 
         return grad
 
-    # Returns list of sampled pixels
+    # Returns list of sampled pixels, to
     def path_sample(self, path, curvature, rate_threshold,dist_threshold):
         sampled_points = []
         for i in range(len(path)):
@@ -134,23 +141,24 @@ class Image_problem:
 
 
     # Returns the closest pixel that is within k range of binary_pixel and its distance to it
-    def find_closest_point(self, binary_pixel,k = 5):
+    def find_closest_points(self, binary_pixel, k = 10):
         neighbour_list = []
+        direct_neighbour = []
         distance_list = []
         for i in range(-k,k+1):
             for j in range(-k,k+1):
                 if 0 <= binary_pixel.x + i < self.n and 0 <= binary_pixel.y + j < self.m:
                     new_pixel = self.binary_image[binary_pixel.x+i][binary_pixel.y+j]
                     if new_pixel.value == 1 and not new_pixel in self.visited:
-                        if abs(i) <= 1 and abs(j) <= 1 :
-                            self.visited.add(new_pixel)
+                        if abs(i) <= 1 and abs(j) <= 1:
+                            direct_neighbour.append(new_pixel)
                         neighbour_list.append(new_pixel)
                         distance_list.append(man_distance(binary_pixel,new_pixel))
 
-        if neighbour_list.__len__()>0:
-            return neighbour_list[distance_list.index(min(distance_list))],man_distance(binary_pixel, neighbour_list[0])
+        if neighbour_list.__len__() > 1:
+            return neighbour_list, distance_list, direct_neighbour
         else :
-            return None,None
+            return None, None, None
 
 
 
@@ -158,11 +166,12 @@ class Image_problem:
         path = [first_point]
         i=0
         while True:
-            closest_point, distance = self.find_closest_point(path[i])
-            self.visited.add(closest_point)
-            i = i+1
-            if closest_point is None:
+            neighbours, distance_list, direct_neighbour = self.find_closest_points(path[i])
+            if neighbours is None:
                 break
+            closest_point = neighbours[distance_list.index(min(distance_list))]
+            self.visited.update(direct_neighbour)
+            i = i+1
             path.append(closest_point)
         if path.__len__() != 1:
             return path
@@ -178,20 +187,18 @@ class Image_problem:
                 if new_path is not None:
                     self.path_list.append(new_path)
 
-            else :
-                other_pixel,dist = self.find_closest_point(past_pixel)
-                if not other_pixel in self.visited :
-                    self.visited.add(pixel)
-                    new_path = self.first_path_detection(pixel)
-                    if new_path is not None:
-                        self.path_list.append(new_path)
+            else:
+                neighbours, distance_list, direct = self.find_closest_points(past_pixel)
+                if neighbours is not None:
+                    other_pixel = neighbours[distance_list.index(min(distance_list))]
+                    if not other_pixel in self.visited:
+                        self.visited.add(pixel)
+                        new_path = self.first_path_detection(pixel)
+                        if new_path is not None:
+                            self.path_list.append(new_path)
             past_pixel = pixel
             first_iter = False
         return
-
-
-
-
 
     def convert_coord_to_page(self, coord):
         # Origin of the image in robor coordinates
@@ -207,7 +214,7 @@ class Image_problem:
         robot_x = DELTA_X - (x * DIF_X)/n
         robot_y = DIF_Y/2 - (y * DIF_Y)/m
 
-        return (robot_x,robot_y)
+        return [int(robot_x),int(robot_y)]
 
 
 
@@ -271,7 +278,7 @@ def skeletonize(img):
 
 
 
-prb = Image_problem('test_draw_2.png')
+prb = Image_problem('test_draw_1.png')
 prb.create_path_list()
 
 
@@ -292,12 +299,12 @@ for i, path in enumerate(prb.sampled_path_list):
                 if 0 < pixel.x + k < prb.n and 0 < pixel.y+k2 < prb.m:
                     x2 = pixel.x + k
                     y2 = pixel.y+k2
-                sampled_img[x2][y2] = colours[i]
+                sampled_img[x2][y2] = colours[min(i,7)]
 
-#cv2.imwrite(r"C:\Users\leona\PycharmProjects\Rob\Lab1\Test_2_paths_k=5_n=500.png", blank_image)
-#cv2.imshow("d",blank_image)
-#cv2.imshow("sampled", sampled_img)
-#cv2.waitKey()
+cv2.imwrite(r"C:\Users\leona\PycharmProjects\Rob\Lab1\Test_2_paths_k=5_n=500.png", blank_image)
+cv2.imshow("d",blank_image)
+cv2.imshow("sampled", sampled_img)
+cv2.waitKey()
 
 
 
