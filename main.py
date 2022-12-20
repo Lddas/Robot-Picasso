@@ -72,7 +72,7 @@ class Image_problem:
         self.path_sec_der = []
         for path in self.path_list:
             curvature = self.second_grad_of_path(path, True)
-            sampled_path = self.path_sample(path, curvature, 0.1, 10)
+            sampled_path = self.path_sample(path, curvature, 0.25, 10)
             self.sampled_path_list.append(sampled_path)
 
         # Convert list of binary Pixels to list of coordinates
@@ -91,11 +91,11 @@ class Image_problem:
                 rob_path.append(self.convert_coord_to_page(coord))
             self.rob_list_path.append(rob_path)
 
-        ser = serial.Serial("COM8", baudrate=9600, bytesize=8, timeout=2, parity="N", xonxoff=0,
-                            stopbits=serial.STOPBITS_ONE)
+        #ser = serial.Serial("COM8", baudrate=9600, bytesize=8, timeout=2, parity="N", xonxoff=0,
+        #                    stopbits=serial.STOPBITS_ONE)
 
-        code_leo.DRAW(ser, self.rob_list_path, 1291, 1436)
-        ser.close()
+        #code_leo.DRAW(ser, self.rob_list_path, 1291, 1436)
+        #ser.close()
 
         return
 
@@ -201,9 +201,6 @@ class Image_problem:
         return
 
     def convert_coord_to_page(self, coord):
-        # Origin of the image in robor coordinates
-        #origin = DIF_LEN DIF_WIDTH
-
         x = coord[0]
         y = coord[1]
 
