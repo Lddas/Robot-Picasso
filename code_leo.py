@@ -72,7 +72,7 @@ def DRAW(ser, list, z_down, z_up):
                 # var_x = list[i][j+1][0] - list[i][j][0] ->pour si jamais on veut roll en fonction de l'avancement du bras
                 # var_y = list[i][j+1][1] - list[i][j][1]
                 # if ((var_x) != 0): #roll de theta
-                # theta = math.atan2( var_y, var_x) - theta
+                #   theta = math.atan2( var_y, var_x) - theta
             print("j", j)
             ser.write(("SETP CHEMIN[" + str(final_path_pos + 1) + "] = CHEMIN[" + str(final_path_pos) + "]\r").encode())
             read_and_wait(ser, 0.3)
@@ -88,7 +88,7 @@ def DRAW(ser, list, z_down, z_up):
         read_and_wait(ser, 0.3)
         final_path_pos += 1
 
-    ser.write(("MOVES CHEMIN 1 " + str(count + 2*l + 1) + " 50000 \r").encode())  # fait suivre chemin au robot, NOT SURE ABOUT THE SPEED
+    ser.write(("MOVES CHEMIN 1 " + str(count + 2*l + 1) + " 10000 \r").encode())  # fait suivre chemin au robot, NOT SURE ABOUT THE SPEED
     read_and_wait(ser, 0.3)
     print("fin dessin")
 

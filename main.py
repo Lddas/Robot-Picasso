@@ -5,14 +5,8 @@ import code_leo
 import serial
 
 
-DIM_MAX = 15  # cm
-DIM_POINT = 0.1  # cm
-MAX_NUM_OF_POINTS = int(DIM_MAX / DIM_POINT)
-TIP_PEN = 14  # cm
-ROBOT_TO_PAPER = 50  # cm
-DIF_Y = 1000
 DIF_X = 1000
-DELTA_X = 5900
+DELTA_X = 6183
 
 class Binary_pixel:
     def __init__(self,x ,y ,value):
@@ -91,11 +85,11 @@ class Image_problem:
                 rob_path.append(self.convert_coord_to_page(coord))
             self.rob_list_path.append(rob_path)
 
-        #ser = serial.Serial("COM8", baudrate=9600, bytesize=8, timeout=2, parity="N", xonxoff=0,
-        #                    stopbits=serial.STOPBITS_ONE)
+        """ser = serial.Serial("COM9", baudrate=9600, bytesize=8, timeout=2, parity="N", xonxoff=0,
+                            stopbits=serial.STOPBITS_ONE)
 
-        #code_leo.DRAW(ser, self.rob_list_path, 1291, 1436)
-        #ser.close()
+        code_leo.DRAW(ser, self.rob_list_path, 1224, 1436)
+        ser.close()"""
 
         return
 
@@ -115,14 +109,15 @@ class Image_problem:
         return grad
 
     # Returns list of sampled pixels, to
-    def path_sample(self, path, curvature, rate_threshold,dist_threshold):
+    def path_sample(self, path, curvature, rate_threshold, dist_threshold):
         sampled_points = []
         for i in range(len(path)):
-            if i == 0 or i == len(path) - 1:
+            if i == 0 or i == (len(path) - 1):
                 # Always include the first and last points
                 sampled_points.append(path[i])
 
-            np.median(curvature)
+            #To choose only the k values with strongest curvature
+            #k = np.percentile(curvature, [])
             rate = curvature[i]
 
             if rate >= rate_threshold and man_distance(path[i],sampled_points[-1]) > dist_threshold:
@@ -131,10 +126,13 @@ class Image_problem:
         return self.path_sample_filter(sampled_points, 1)
 
     def path_sample_filter(self, path, thresholdd):
-        grad = self.second_grad_of_path(path,False)
+        grad = self.second_grad_of_path(path, False)
         filtered_points = []
-        for i in range(len(path)-1):
-            if grad[i] > thresholdd:
+        for i in range(len(path)):
+            if i == 0 or i == (len(path) - 1):
+                # Always include the first and last points
+                filtered_points.append(path[i])
+            elif grad[i] > thresholdd:
                 filtered_points.append(path[i])
         return filtered_points
 
@@ -201,15 +199,19 @@ class Image_problem:
         return
 
     def convert_coord_to_page(self, coord):
+
         x = coord[0]
         y = coord[1]
 
         # n is the image lenghts, m is the image width
-        n = np.shape(self.grey)[0]
-        m = np.shape(self.grey)[1]
+        n = np.max(np.shape(self.skeleton[:1]))
+        m = np.min(np.shape(self.skeleton[:1]))
 
-        robot_x = DELTA_X - (x * DIF_X)/n
-        robot_y = DIF_Y/2 - (y * DIF_Y)/m
+
+        dif_y = DIF_X * m/n
+
+        robot_y = DELTA_X - (x * DIF_X)/n
+        robot_x = dif_y/2 - (y * dif_y)/m
 
         return [int(robot_x),int(robot_y)]
 
@@ -275,7 +277,7 @@ def skeletonize(img):
 
 
 
-prb = Image_problem('test_draw_1.png')
+prb = Image_problem('test_draw_2.png')
 prb.create_path_list()
 
 
@@ -298,9 +300,24 @@ for i, path in enumerate(prb.sampled_path_list):
                     y2 = pixel.y+k2
                 sampled_img[x2][y2] = colours[min(i,7)]
 
+robot_im = np.empty((7000,7000,3))
+robot_points = prb.rob_list_path
+for i, list in enumerate(robot_points):
+        for coord in list:
+            for k in range(-3, 3):
+                for k2 in range(-3, 3):
+                    x2, y2 = 0, 0
+                    #if 0 < coord[0] + k  and 0 < coord[1] + k2 < prb.m:
+                    x2 = coord[0] + k
+                    y2 = coord[1] +k2
+                    robot_im[x2][y2] = colours[min(i,7)]
+
+
 cv2.imwrite(r"C:\Users\leona\PycharmProjects\Rob\Lab1\Test_2_paths_k=5_n=500.png", blank_image)
 cv2.imshow("d",blank_image)
 cv2.imshow("sampled", sampled_img)
+#cv2.imshow("rob", cv2.resize(robot_im, (), interpolation=cv2.INTER_AREA))
+
 cv2.waitKey()
 
 
