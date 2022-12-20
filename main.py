@@ -92,11 +92,11 @@ class Image_problem:
                 rob_path.append(self.convert_coord_to_page(coord))
             self.rob_list_path.append(rob_path)
 
-        """ser = serial.Serial("COM9", baudrate=9600, bytesize=8, timeout=2, parity="N", xonxoff=0,
+        ser = serial.Serial("COM9", baudrate=9600, bytesize=8, timeout=2, parity="N", xonxoff=0,
                             stopbits=serial.STOPBITS_ONE)
 
         code_leo.DRAW(ser, self.rob_list_path, 1224, 1436)
-        ser.close()"""
+        ser.close()
 
         return
 
