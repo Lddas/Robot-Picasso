@@ -63,18 +63,25 @@ class Image_problem:
 
         #Sets up the path sampling
         self.sampled_path_list = []
-        self.path_sec_der = []
-        for path in self.path_list:
-            curvature = self.second_grad_of_path(path, True)
-            sampled_path = self.path_sample(path, curvature, 0.25, 10)
-            self.sampled_path_list.append(sampled_path)
+
+        """# K fold cross-eval
+        for dist_threshold in range(20,40):
+            for filter_thresh in range(4,15):
+                for filter_size in range(1,20):
+                    self.sample_all_paths(20, dist_threshold, filter_thresh, filter_size)
+
+                    self.skeleton()
+                    mse = mse()"""
+
+        self.sample_all_paths(nb_of_total_samples=50  , dist_threshold=20, filter_thresh=7, filter_size=2)
+
 
         # Convert list of binary Pixels to list of coordinates
         self.path_matrix = []
         for path in self.sampled_path_list:
             coord_path = []
             for pixel in path:
-                coord_path.append((pixel.x,pixel.y))
+                coord_path.append((pixel.x, pixel.y))
             self.path_matrix.append(coord_path)
 
         # Convert from list of img cord to robot coord
@@ -94,7 +101,7 @@ class Image_problem:
         return
 
     # Returns the second gradient of a path
-    def second_grad_of_path(self, path, filter, n = 1, m = 1):
+    def second_grad_of_path(self, path, filter, filter_size, n = 1, m = 1):
         coord = []
         for pixel in path:
             coord.append([pixel.x, pixel.y])
@@ -104,35 +111,57 @@ class Image_problem:
         # If the function is called with filter = True then we filter the signal with
         # a low pass filter achieved by a convolution to make it smoother
         if filter:
-            grad = scipy.signal.convolve(grad,np.ones(10)/10)
+            grad = scipy.signal.convolve(grad,np.ones(filter_size)/filter_size)
 
         return grad
 
+    def sample_all_paths(self, nb_of_total_samples, dist_threshold, filter_thresh, filter_size):
+        curvature_list = []
+
+        for i, path in enumerate(self.path_list):
+            curvature = self.second_grad_of_path(path, True, filter_size)
+            curvature_list.append(curvature)
+
+        all_curvatures = []
+        for curvature in curvature_list:
+            for value in curvature:
+                all_curvatures.append(value)
+
+        all_curvatures = np.array(all_curvatures)[:: dist_threshold]
+        quantile = 1 - nb_of_total_samples / all_curvatures.size
+        threshold = np.quantile(all_curvatures, quantile)
+
+        #Indexes of the points with highest curvature
+        for i, path in enumerate(self.path_list):
+            sampled_path = self.path_sample(path, curvature, threshold, dist_threshold, filter_thresh, filter_size)
+            self.sampled_path_list.append(sampled_path)
+
+
+
     # Returns list of sampled pixels, to
-    def path_sample(self, path, curvature, rate_threshold, dist_threshold):
+    def path_sample(self, path, curvature, curve_threshold, dist_threshold, filter_thresh, filter_size):
         sampled_points = []
         for i in range(len(path)):
             if i == 0 or i == (len(path) - 1):
                 # Always include the first and last points
                 sampled_points.append(path[i])
 
-            #To choose only the k values with strongest curvature
-            #k = np.percentile(curvature, [])
-            rate = curvature[i]
+            curve = curvature[i]
 
-            if rate >= rate_threshold and man_distance(path[i],sampled_points[-1]) > dist_threshold:
+            if curve >= curve_threshold and man_distance(path[i], sampled_points[-1]) > dist_threshold:
                 # Include this point in the sampling
                 sampled_points.append(path[i])
-        return self.path_sample_filter(sampled_points, 1)
+        return self.path_sample_filter(sampled_points, filter_thresh, filter_size)
+        #return sampled_points
 
-    def path_sample_filter(self, path, thresholdd):
-        grad = self.second_grad_of_path(path, False)
+    def path_sample_filter(self, path, filter_thresh, filter_size):
+        grad = self.second_grad_of_path(path, False, filter_size)
         filtered_points = []
         for i in range(len(path)):
             if i == 0 or i == (len(path) - 1):
                 # Always include the first and last points
                 filtered_points.append(path[i])
-            elif grad[i] > thresholdd:
+            elif grad[i] > filter_thresh:
                 filtered_points.append(path[i])
         return filtered_points
 
@@ -264,6 +293,13 @@ def skeletonize(img):
     #cv2.destroyAllWindows()
     return skel
 
+def mse(img1, img2):
+   h, w = img1.shape
+   diff = cv2.subtract(img1, img2)
+   err = np.sum(diff**2)
+   mse = err/(float(h*w))
+   return mse
+
 ########################################################################
 #image = cv2.imread("test_draw_1.png")
 # let's downscale the image using new  width and height
@@ -312,7 +348,10 @@ for i, list in enumerate(robot_points):
                     y2 = coord[1] +k2
                     robot_im[x2][y2] = colours[min(i,7)]
 
-
+"""ret, thresh = cv2.threshold(prb.skeleton, 127, 255, 0)
+contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+a = cv2.drawContours(prb.skeleton, contours, -1, (0,255,0), 3)
+"""
 cv2.imwrite(r"C:\Users\leona\PycharmProjects\Rob\Lab1\Test_2_paths_k=5_n=500.png", blank_image)
 cv2.imshow("d",blank_image)
 cv2.imshow("sampled", sampled_img)
