@@ -73,7 +73,7 @@ class Image_problem:
                     self.skeleton()
                     mse = mse()"""
 
-        self.sample_all_paths(nb_of_total_samples=50  , dist_threshold=20, filter_thresh=7, filter_size=2)
+        self.sample_all_paths(nb_of_total_samples=100, dist_threshold=20, filter_thresh=7, filter_size=2)
 
 
         # Convert list of binary Pixels to list of coordinates
@@ -91,13 +91,11 @@ class Image_problem:
             for coord in path:
                 rob_path.append(self.convert_coord_to_page(coord))
             self.rob_list_path.append(rob_path)
-
         ser = serial.Serial("COM9", baudrate=9600, bytesize=8, timeout=2, parity="N", xonxoff=0,
-                            stopbits=serial.STOPBITS_ONE)
+                                    stopbits=serial.STOPBITS_ONE)
 
         code_leo.DRAW(ser, self.rob_list_path, 1224, 1436)
         ser.close()
-
         return
 
     # Returns the second gradient of a path
@@ -127,7 +125,7 @@ class Image_problem:
             for value in curvature:
                 all_curvatures.append(value)
 
-        all_curvatures = np.array(all_curvatures)[:: dist_threshold]
+        all_curvatures = np.array(all_curvatures)
         quantile = 1 - nb_of_total_samples / all_curvatures.size
         threshold = np.quantile(all_curvatures, quantile)
 
