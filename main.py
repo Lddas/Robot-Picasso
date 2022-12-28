@@ -1,3 +1,5 @@
+import random
+
 import cv2
 import numpy as np
 import scipy
@@ -63,17 +65,31 @@ class Image_problem:
 
         #Sets up the path sampling
         self.sampled_path_list = []
+        for path in self.path_list:
+            self.sampled_path_list.append([])
 
-        """# K fold cross-eval
-        for dist_threshold in range(20,40):
-            for filter_thresh in range(4,15):
-                for filter_size in range(1,20):
-                    self.sample_all_paths(20, dist_threshold, filter_thresh, filter_size)
 
-                    self.skeleton()
-                    mse = mse()"""
+        nb_of_total_samples = 100
+        dist_threshold = 50
+        filter_thresh = 0
+        filter_size = 10
 
-        self.sample_all_paths(nb_of_total_samples=100, dist_threshold=20, filter_thresh=7, filter_size=2)
+        self.curvature_list = []
+        self.dist_filtered_curvature = [] # list of curvatures whose points are distant enough
+        self.all_curvatures = [] # All the curvatures in one list
+
+        for i, path in enumerate(self.path_list):
+            curvature = self.second_grad_of_path(path, True, filter_size)
+            self.curvature_list.append(curvature)
+            self.dist_filtered_curvature.append(curvature[0])
+            # last_added = path[0]
+            for j, value in enumerate(curvature):
+                self.all_curvatures.append((value, i, j)) # (Curve value, path_number, pixel_number in path)
+        self.all_curvatures = np.array(self.all_curvatures)
+        self.all_curvatures = self.all_curvatures[self.all_curvatures[:, 0].argsort()]
+
+
+        self.sample_all_paths(nb_of_total_samples, dist_threshold, filter_thresh, filter_size)
 
 
         # Convert list of binary Pixels to list of coordinates
@@ -91,11 +107,11 @@ class Image_problem:
             for coord in path:
                 rob_path.append(self.convert_coord_to_page(coord))
             self.rob_list_path.append(rob_path)
-        ser = serial.Serial("COM9", baudrate=9600, bytesize=8, timeout=2, parity="N", xonxoff=0,
+        """ser = serial.Serial("COM9", baudrate=9600, bytesize=8, timeout=2, parity="N", xonxoff=0,
                                     stopbits=serial.STOPBITS_ONE)
 
         code_leo.DRAW(ser, self.rob_list_path, 1224, 1436)
-        ser.close()
+        ser.close()"""
         return
 
     # Returns the second gradient of a path
@@ -109,46 +125,68 @@ class Image_problem:
         # If the function is called with filter = True then we filter the signal with
         # a low pass filter achieved by a convolution to make it smoother
         if filter:
-            grad = scipy.signal.convolve(grad,np.ones(filter_size)/filter_size)
+            grad = scipy.signal.convolve(grad, np.ones(filter_size)/filter_size, mode="same")
 
         return grad
 
     def sample_all_paths(self, nb_of_total_samples, dist_threshold, filter_thresh, filter_size):
-        curvature_list = []
+        i = 0 # Counter of all the iterations of the while loop
+        k = 0 # Counter of the number of sampled values
 
-        for i, path in enumerate(self.path_list):
-            curvature = self.second_grad_of_path(path, True, filter_size)
-            curvature_list.append(curvature)
 
-        all_curvatures = []
-        for curvature in curvature_list:
-            for value in curvature:
-                all_curvatures.append(value)
+        while k < nb_of_total_samples - self.path_list.__len__() and i < len(self.all_curvatures)-1:
+            # Is the pixel corresponding to the curvature value
+            new_pixel = self.path_list[int(self.all_curvatures[-i][1])][int(self.all_curvatures[-i][2])]
 
-        all_curvatures = np.array(all_curvatures)
-        quantile = 1 - nb_of_total_samples / all_curvatures.size
-        threshold = np.quantile(all_curvatures, quantile)
+            # Checks if the new_pixel is distant enough from the already sampled points
+            distant_enough = True
+            for list in self.sampled_path_list:
+                for pixel in list:
+                    if man_distance(new_pixel, pixel) < dist_threshold:
+                        distant_enough = False
 
-        #Indexes of the points with highest curvature
-        for i, path in enumerate(self.path_list):
-            sampled_path = self.path_sample(path, curvature, threshold, dist_threshold, filter_thresh, filter_size)
-            self.sampled_path_list.append(sampled_path)
+            path_number = int(self.all_curvatures[-i][1])
+
+            # If it's distant enough we add it to the sampled list
+            if distant_enough:
+                self.sampled_path_list[path_number].append(new_pixel)
+                k = k + 1
+
+            #self.path_sample_filter(self.sampled_path_list, filter_thresh, filter_size)
+            i = i + 1
+        return
+
+    """ dist = np.array(self.dist_filtered_curvature)
+            quantile = 1 - (nb_of_total_samples - self.path_list.__len__()*2) / len(self.dist_filtered_curvature)
+            if quantile > 0:
+                threshold = np.quantile(dist, quantile)
+            else:
+                threshold = 100000 # Value that will never be reached
+
+            for i, path in enumerate(self.path_list):
+                sampled_path = self.path_sample(path, self.curvature_list[i], threshold, dist_threshold, filter_thresh,\
+                                                filter_size, nb_of_total_samples)
+                self.sampled_path_list.append(sampled_path)"""
 
 
 
     # Returns list of sampled pixels, to
-    def path_sample(self, path, curvature, curve_threshold, dist_threshold, filter_thresh, filter_size):
+    def path_sample(self, path, curvature, curve_threshold, dist_threshold, filter_thresh, filter_size, nb_of_total_samples):
         sampled_points = []
+
+
         for i in range(len(path)):
             if i == 0 or i == (len(path) - 1):
                 # Always include the first and last points
                 sampled_points.append(path[i])
+                continue
 
             curve = curvature[i]
 
             if curve >= curve_threshold and man_distance(path[i], sampled_points[-1]) > dist_threshold:
                 # Include this point in the sampling
                 sampled_points.append(path[i])
+
         return self.path_sample_filter(sampled_points, filter_thresh, filter_size)
         #return sampled_points
 
@@ -159,7 +197,7 @@ class Image_problem:
             if i == 0 or i == (len(path) - 1):
                 # Always include the first and last points
                 filtered_points.append(path[i])
-            elif grad[i] > filter_thresh:
+            elif grad[i] >= filter_thresh:
                 filtered_points.append(path[i])
         return filtered_points
 
@@ -350,10 +388,9 @@ for i, list in enumerate(robot_points):
 contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 a = cv2.drawContours(prb.skeleton, contours, -1, (0,255,0), 3)
 """
-cv2.imwrite(r"C:\Users\leona\PycharmProjects\Rob\Lab1\Test_2_paths_k=5_n=500.png", blank_image)
-cv2.imshow("d",blank_image)
-cv2.imshow("sampled", sampled_img)
-#cv2.imshow("rob", cv2.resize(robot_im, (), interpolation=cv2.INTER_AREA))
+cv2.imwrite(r"C:\Users\leona\PycharmProjects\Rob\Lab1\Results\im1.png" , blank_image)
+cv2.imwrite(r"C:\Users\leona\PycharmProjects\Rob\Lab1\Results\im2" + str(random.randint(0,900000)) + ".png", sampled_img)
+#cv2.imwrite(r"C:\Users\leona\PycharmProjects\Rob\Lab1\Results\im3" + random.Random + ".png", robot_im)
 
 cv2.waitKey()
 
