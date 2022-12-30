@@ -1,5 +1,4 @@
 import random
-
 import cv2
 import numpy as np
 import scipy
@@ -7,9 +6,11 @@ import code_leo
 import serial
 
 
-DIF_X = 1000
-DELTA_X = 6183
+DIF_Y = 1000
+DIF_X = 2000
+DELTA_X = 5900
 
+# Binary mask type of class with also the coordinates x and y as attributes
 class Binary_pixel:
     def __init__(self,x ,y ,value):
         self.x = x
@@ -42,7 +43,6 @@ class Image_problem:
         new_im =[[]]
         self.black_pixels =[]
         threshold = 10
-
         for i, line in enumerate(self.skeleton):
             new_line=[]
             for j, pixel in enumerate(line):
@@ -63,36 +63,32 @@ class Image_problem:
         self.path_list = []
         self.create_path_list()
 
-        #Sets up the path sampling
+        # Sets up the path sampling
         self.sampled_path_list = []
-        for path in self.path_list:
+        for _ in self.path_list:
             self.sampled_path_list.append([])
 
+        # Variables used to determine the number of points the robot will draw
+        nb_of_total_samples = 50 # Number of points the robot will have to allocate memory to
+        dist_threshold = 30 # Minimum distance between two points
+        filter_size = 10 # Filter size that determines the low pass filter used on the gradient
 
-        nb_of_total_samples = 100
-        dist_threshold = 50
-        filter_thresh = 0
-        filter_size = 10
-
-        self.curvature_list = []
-        self.dist_filtered_curvature = [] # list of curvatures whose points are distant enough
+        self.curvature_list = [] # List of the paths' curvatures (gradient norm)
         self.all_curvatures = [] # All the curvatures in one list
 
+        # Sets up the curvature calculations
         for i, path in enumerate(self.path_list):
             curvature = self.second_grad_of_path(path, True, filter_size)
             self.curvature_list.append(curvature)
-            self.dist_filtered_curvature.append(curvature[0])
-            # last_added = path[0]
             for j, value in enumerate(curvature):
                 self.all_curvatures.append((value, i, j)) # (Curve value, path_number, pixel_number in path)
         self.all_curvatures = np.array(self.all_curvatures)
-        self.all_curvatures = self.all_curvatures[self.all_curvatures[:, 0].argsort()]
+        self.all_curvatures = self.all_curvatures[self.all_curvatures[:, 0].argsort()] # Sorts the curvatures
 
+        # Chooses which points to keep
+        self.sample_all_paths(nb_of_total_samples, dist_threshold, filter_size)
 
-        self.sample_all_paths(nb_of_total_samples, dist_threshold, filter_thresh, filter_size)
-
-
-        # Convert list of binary Pixels to list of coordinates
+        # Converts list of binary Pixels to list of coordinates
         self.path_matrix = []
         for path in self.sampled_path_list:
             coord_path = []
@@ -100,16 +96,18 @@ class Image_problem:
                 coord_path.append((pixel.x, pixel.y))
             self.path_matrix.append(coord_path)
 
-        # Convert from list of img cord to robot coord
+        # Convert from list of coordinates to robot coordinates
         self.rob_list_path = []
         for path in self.path_matrix:
             rob_path = []
             for coord in path:
                 rob_path.append(self.convert_coord_to_page(coord))
             self.rob_list_path.append(rob_path)
-        """ser = serial.Serial("COM9", baudrate=9600, bytesize=8, timeout=2, parity="N", xonxoff=0,
-                                    stopbits=serial.STOPBITS_ONE)
 
+        """# Creates the serial connection and gives the instructions to the robot
+        ser = serial.Serial("COM9", baudrate=9600, bytesize=8, timeout=2, parity="N", xonxoff=0,
+                                    stopbits=serial.STOPBITS_ONE)
+        
         code_leo.DRAW(ser, self.rob_list_path, 1224, 1436)
         ser.close()"""
         return
@@ -123,13 +121,14 @@ class Image_problem:
         grad = np.apply_along_axis(np.linalg.norm, 1, grad)
 
         # If the function is called with filter = True then we filter the signal with
-        # a low pass filter achieved by a convolution to make it smoother
+        # a low pass filter, achieved by a convolution to make it smoother
         if filter:
             grad = scipy.signal.convolve(grad, np.ones(filter_size)/filter_size, mode="same")
 
         return grad
 
-    def sample_all_paths(self, nb_of_total_samples, dist_threshold, filter_thresh, filter_size):
+    # Samples from the paths with many points to a paths with an upper limit of  nb_of_total_samples points
+    def sample_all_paths(self, nb_of_total_samples, dist_threshold, filter_size):
         i = 0 # Counter of all the iterations of the while loop
         k = 0 # Counter of the number of sampled values
 
@@ -146,60 +145,18 @@ class Image_problem:
                         distant_enough = False
 
             path_number = int(self.all_curvatures[-i][1])
-
+            index_number = self.all_curvatures[-i][2]
             # If it's distant enough we add it to the sampled list
-            if distant_enough:
+            # If it's the first or the last point we add it to the list
+            if distant_enough or index_number == 0 or index_number == len(self.path_list[path_number])-1:
                 self.sampled_path_list[path_number].append(new_pixel)
                 k = k + 1
 
-            #self.path_sample_filter(self.sampled_path_list, filter_thresh, filter_size)
             i = i + 1
+
         return
 
-    """ dist = np.array(self.dist_filtered_curvature)
-            quantile = 1 - (nb_of_total_samples - self.path_list.__len__()*2) / len(self.dist_filtered_curvature)
-            if quantile > 0:
-                threshold = np.quantile(dist, quantile)
-            else:
-                threshold = 100000 # Value that will never be reached
 
-            for i, path in enumerate(self.path_list):
-                sampled_path = self.path_sample(path, self.curvature_list[i], threshold, dist_threshold, filter_thresh,\
-                                                filter_size, nb_of_total_samples)
-                self.sampled_path_list.append(sampled_path)"""
-
-
-
-    # Returns list of sampled pixels, to
-    def path_sample(self, path, curvature, curve_threshold, dist_threshold, filter_thresh, filter_size, nb_of_total_samples):
-        sampled_points = []
-
-
-        for i in range(len(path)):
-            if i == 0 or i == (len(path) - 1):
-                # Always include the first and last points
-                sampled_points.append(path[i])
-                continue
-
-            curve = curvature[i]
-
-            if curve >= curve_threshold and man_distance(path[i], sampled_points[-1]) > dist_threshold:
-                # Include this point in the sampling
-                sampled_points.append(path[i])
-
-        return self.path_sample_filter(sampled_points, filter_thresh, filter_size)
-        #return sampled_points
-
-    def path_sample_filter(self, path, filter_thresh, filter_size):
-        grad = self.second_grad_of_path(path, False, filter_size)
-        filtered_points = []
-        for i in range(len(path)):
-            if i == 0 or i == (len(path) - 1):
-                # Always include the first and last points
-                filtered_points.append(path[i])
-            elif grad[i] >= filter_thresh:
-                filtered_points.append(path[i])
-        return filtered_points
 
 
 
@@ -264,27 +221,21 @@ class Image_problem:
         return
 
     def convert_coord_to_page(self, coord):
-
         x = coord[0]
         y = coord[1]
 
         # n is the image lenghts, m is the image width
-        n = np.max(np.shape(self.skeleton[:1]))
-        m = np.min(np.shape(self.skeleton[:1]))
+        n = np.shape(self.grey)[0]
+        m = np.shape(self.grey)[1]
 
+        robot_x = DELTA_X - (x * DIF_X) / n
+        robot_y = DIF_Y / 2 - (y * DIF_Y) / m
 
-        dif_y = DIF_X * m/n
-
-        robot_y = DELTA_X - (x * DIF_X)/n
-        robot_x = dif_y/2 - (y * dif_y)/m
-
-        return [int(robot_x),int(robot_y)]
-
-
+        return [int(robot_x), int(robot_y)]
 
 
 # Returns the manhattan distance between two pixels
-def man_distance(pixel1,pixel2):
+def man_distance(pixel1, pixel2):
         return (abs(pixel1.x - pixel2.x)+abs(pixel1.y - pixel2.y))
 
 def sign(x):
@@ -322,30 +273,10 @@ def skeletonize(img):
         # Step 5: If there are no white pixels left ie.. the image has been completely eroded, quit the loop
         if cv2.countNonZero(img) == 0:
             break
-
-    # Displaying the final skeleton
-    #cv2.imshow("Skeleton", skel)
-    #cv2.waitKey(0)
-    #cv2.destroyAllWindows()
     return skel
 
-def mse(img1, img2):
-   h, w = img1.shape
-   diff = cv2.subtract(img1, img2)
-   err = np.sum(diff**2)
-   mse = err/(float(h*w))
-   return mse
 
 ########################################################################
-#image = cv2.imread("test_draw_1.png")
-# let's downscale the image using new  width and height
-#n, m, x = image.shape
-#down_width = 100
-#down_height = int(down_width * n / m)
-#down_points = (down_width, down_height)
-#im = cv2.resize(image, down_points, interpolation=cv2.INTER_AREA)
-#cv2.imshow('Resized Down by defining height and width', im)
-#cv2.waitKey()
 
 
 
@@ -381,18 +312,14 @@ for i, list in enumerate(robot_points):
                     x2, y2 = 0, 0
                     #if 0 < coord[0] + k  and 0 < coord[1] + k2 < prb.m:
                     x2 = coord[0] + k
-                    y2 = coord[1] +k2
+                    y2 = coord[1] + k2
                     robot_im[x2][y2] = colours[min(i,7)]
 
-"""ret, thresh = cv2.threshold(prb.skeleton, 127, 255, 0)
-contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-a = cv2.drawContours(prb.skeleton, contours, -1, (0,255,0), 3)
-"""
+
 cv2.imwrite(r"C:\Users\leona\PycharmProjects\Rob\Lab1\Results\im1.png" , blank_image)
-cv2.imwrite(r"C:\Users\leona\PycharmProjects\Rob\Lab1\Results\im2" + str(random.randint(0,900000)) + ".png", sampled_img)
+cv2.imwrite(r"C:\Users\leona\PycharmProjects\Rob\Lab1\Results2\im2" + str(random.randint(0,900000)) + ".png", sampled_img)
 #cv2.imwrite(r"C:\Users\leona\PycharmProjects\Rob\Lab1\Results\im3" + random.Random + ".png", robot_im)
 
-cv2.waitKey()
 
 
 
